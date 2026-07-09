@@ -59,3 +59,20 @@ def is_auth_error(e):
     return getattr(e, "code", None) in (400, 401, 403) and (
         "api key" in msg or "api_key" in msg or "permission" in msg or "credential" in msg
     )
+
+
+def describe_api_error(e):
+    """Turn a Gemini API exception into a short, human-readable reason.
+
+    Used so a failed assessment shows *why* it failed (bad key, rate limit, wrong
+    model, …) instead of a generic 'assessment failed' that hides the real cause.
+    """
+    code = getattr(e, "code", None)
+    if is_auth_error(e):
+        return "authentication failed — the GEMINI_API_KEY was rejected (check it's valid)"
+    if code == 429:
+        return "rate limited — the free-tier quota was exceeded, try again shortly"
+    if code == 404:
+        return f"model not available ({MODEL})"
+    msg = (getattr(e, "message", None) or str(e)).strip()
+    return f"API error {code}: {msg}".strip().rstrip(":") if (code or msg) else "unknown API error"

@@ -14,7 +14,7 @@ from blast_radius import build_reverse_map, find_blast_radius, resolve_target, s
 from diff_functions import diff_functions
 from contracts import extract_expectations, extract_promises, find_broken_contracts
 from gemini_common import (
-    MODEL, MissingAPIKey, make_client, get_client, generate_json, token_counts, is_auth_error,
+    MODEL, MissingAPIKey, make_client, get_client, generate_json, token_counts, describe_api_error,
 )
 from github_source import fetch_branches, GitError
 from report import diff_result_to_markdown, write_report
@@ -184,17 +184,16 @@ def analyze_target(client, target, change_description, changed_code, reverse_map
                 broken = [BrokenContractInfo(bc.expectation, bc.why, bc.line)
                           for bc in check.broken_contracts]
         except errors.APIError as e:
-            if is_auth_error(e):
-                print("Error: authentication failed — check your GEMINI_API_KEY.")
-                sys.exit(1)
-            print(f"  ! Could not assess {short_name(affected_name)}: {e}")
+            reason = describe_api_error(e)
+            print(f"  ! Could not assess {short_name(affected_name)}: {reason}")
             affected.append(AffectedFunction(affected_name, relation, "unknown", False,
-                                             "assessment failed", []))
+                                             reason, []))
             continue
 
         if assessment is None:
             affected.append(AffectedFunction(affected_name, relation, "unknown", False,
-                                             "assessment failed", broken))
+                                             "model returned an unparseable response "
+                                             "(no structured risk assessment)", broken))
         else:
             affected.append(AffectedFunction(affected_name, relation, assessment.risk_level,
                                              assessment.will_break, assessment.reason, broken))

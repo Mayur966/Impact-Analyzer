@@ -12,6 +12,30 @@ from github_source import GitError
 
 RISK_COLOR = {"high": "red", "medium": "orange", "low": "green"}
 
+MISSING_KEY_MSG = (
+    "No Gemini API key found. On Streamlit Cloud, add it under "
+    "**⚙️ Settings → Secrets** as `GEMINI_API_KEY = \"your-key\"`. "
+    "Running locally? `export GEMINI_API_KEY=…` before launching."
+)
+
+
+def load_api_key():
+    """Make the Gemini key available as an env var, wherever we're running.
+
+    Locally you `export GEMINI_API_KEY=…` and that wins. On Streamlit Cloud there's
+    no shell to export in, so we read the key from the app's Secrets and copy it into
+    os.environ — exactly where get_client() already looks. If neither is set we do
+    nothing, and get_client() raises MissingAPIKey with a clear message.
+    """
+    if os.environ.get("GEMINI_API_KEY") or os.environ.get("GOOGLE_API_KEY"):
+        return  # a local export already set it — leave it alone
+    try:
+        key = st.secrets["GEMINI_API_KEY"]  # raises if no secrets file / key on cloud
+    except Exception:
+        return  # no secret configured — let get_client() report the missing key
+    if key:
+        os.environ["GEMINI_API_KEY"] = key
+
 
 def find_code_dir(root):
     """Return the directory under `root` holding the most .py files (or None if none)."""
@@ -51,6 +75,7 @@ def render_usage(u):
 
 
 st.set_page_config(page_title="Code Impact Analyzer", page_icon="🧩")
+load_api_key()   # pull the key from Secrets (cloud) or the environment (local)
 st.title("🧩 Code Impact Analyzer")
 st.write("See which functions are at risk from a change — from a zip you upload or two branches of a GitHub repo.")
 
@@ -96,8 +121,7 @@ if mode == "Upload a .zip":
                 with st.spinner("Analyzing…"):
                     result = analyze_change(code_dir, function_name.strip(), change.strip())
             except MissingAPIKey:
-                st.error("No GEMINI_API_KEY found on the server. Set it in the terminal "
-                         "before launching:  export GEMINI_API_KEY=…")
+                st.error(MISSING_KEY_MSG)
                 st.stop()
             except ValueError as e:
                 st.error(str(e))
@@ -138,8 +162,7 @@ else:
             st.error(f"GitHub error: {e}")
             st.stop()
         except MissingAPIKey:
-            st.error("No GEMINI_API_KEY found on the server. Set it in the terminal "
-                     "before launching:  export GEMINI_API_KEY=…")
+            st.error(MISSING_KEY_MSG)
             st.stop()
         except ValueError as e:
             st.error(str(e))
